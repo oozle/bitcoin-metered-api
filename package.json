@@ -55,7 +55,7 @@
   "dependencies": {
     "@eslint/js": "^9.38.0",
     "@fastify/cors": "^9.0.1",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^12.4.1",
     "bullmq": "^5.28.2",
     "commander": "^12.1.0",
     "fastify": "^5.1.0",
