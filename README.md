@@ -106,36 +106,25 @@ curl -X POST http://localhost:3000/v1/paycall \
 
 ### Agent Flow
 
-```
-┌─────────┐                ┌──────────────┐              ┌────────┐
-│AI Agent │                │ Metered API  │              │  ASP   │
-└────┬────┘                └──────┬───────┘              └───┬────┘
-     │                             │                          │
-     │ 1. GET /v1/quote           │                          │
-     │─────────────────────────────>                         │
-     │                             │                          │
-     │ Quote (price, expiry, ASP)  │                          │
-     │<─────────────────────────────│                          │
-     │                             │                          │
-     │ 2. Create VTXO spend        │                          │
-     │ (off-chain Bitcoin tx)      │                          │
-     │                             │                          │
-     │ 3. POST /v1/paycall         │                          │
-     │    + VTXO spend + proof     │                          │
-     │─────────────────────────────>                         │
-     │                             │                          │
-     │                             │ 4. Verify VTXO spend     │
-     │                             │────────────────────────> │
-     │                             │                          │
-     │                             │ 5. Settlement confirmed  │
-     │                             │ <──────────────────────── │
-     │                             │                          │
-     │                             │ 6. Execute job           │
-     │                             │    (summarize, etc.)     │
-     │                             │                          │
-     │ 7. Result + Receipt         │                          │
-     │ <─────────────────────────── │                          │
-     │                             │                          │
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Agent as AI Agent
+    participant API as Metered API
+    participant ASP as ASP (Arkade)
+    
+    Agent->>API: 1. GET /v1/quote?endpoint=summarize&tokens=1000
+    API-->>Agent: Quote (price, expiry, ASP details)
+    
+    Note over Agent: 2. Create VTXO spend<br/>(off-chain Bitcoin tx)
+    
+    Agent->>API: 3. POST /v1/paycall<br/>+ VTXO spend + proof
+    API->>ASP: 4. Verify VTXO spend
+    ASP-->>API: 5. Settlement confirmed
+    
+    Note over API: 6. Execute job<br/>(summarize, etc.)
+    
+    API-->>Agent: 7. Result + Receipt
 ```
 
 ### Payment Verification
@@ -235,6 +224,130 @@ npm run lint
 ```
 
 ## 🏗️ Architecture
+
+### System Components
+
+```mermaid
+flowchart TB
+    Client[AI Agent/Client]
+    
+    subgraph API ["Bitcoin Metered API"]
+        Router[HTTP Router]
+        Quote[Quote Service]
+        Payment[Payment Verifier]
+        Jobs[Job Worker]
+        DB[(SQLite Database)]
+    end
+    
+    subgraph External ["External Services"]
+        ASP[Arkade ASP]
+    end
+    
+    Client --> Router
+    Router --> Quote
+    Router --> Payment
+    Router --> Jobs
+    Quote --> DB
+    Payment --> ASP
+    Payment --> DB
+    Jobs --> DB
+    
+    style Client fill:#e1f5fe
+    style ASP fill:#fff3e0
+    style DB fill:#f3e5f5
+```
+
+### Request Lifecycle
+
+```mermaid
+flowchart TD
+    Start([Client Request]) --> Route{Route?}
+    
+    Route -->|GET /v1/quote| Quote[Generate Quote]
+    Route -->|POST /v1/paycall| Idempotent{Idempotency<br/>Key Exists?}
+    Route -->|GET /health| Health[Health Check]
+    Route -->|Other| Info[API Info]
+    
+    Quote --> QuoteDB[Store Quote]
+    QuoteDB --> QuoteResp[Return Quote]
+    
+    Idempotent -->|Yes| Cache[Return Cached Response]
+    Idempotent -->|No| ValidateQuote{Valid Quote?}
+    
+    ValidateQuote -->|No| QuoteErr[409 Quote Expired]
+    ValidateQuote -->|Yes| VerifyPayment[Verify VTXO Spend]
+    
+    VerifyPayment --> PaymentOK{Payment Valid?}
+    PaymentOK -->|No| PaymentErr[402 Payment Invalid]
+    PaymentOK -->|Yes| ExecuteJob[Execute Job]
+    
+    ExecuteJob --> JobResult{Job Success?}
+    JobResult -->|No| JobErr[500 Job Failed]
+    JobResult -->|Yes| Success[200 Result + Receipt]
+    
+    Health --> HealthResp[Return Health Status]
+    Info --> InfoResp[Return API Info]
+    
+    style Start fill:#e8f5e8
+    style Success fill:#e8f5e8
+    style QuoteErr fill:#ffebee
+    style PaymentErr fill:#ffebee
+    style JobErr fill:#ffebee
+```
+
+### Database Schema
+
+```mermaid
+erDiagram
+    QUOTES {
+        string id PK
+        string endpoint
+        string units
+        integer price_sats
+        string expires_at
+        string nonce UK
+        string receiver_pubkey
+        string asp_url
+        string status
+        string created_at
+    }
+    
+    PAYMENTS {
+        string id PK
+        string quote_id FK
+        string sender_pubkey
+        integer paid_sats
+        string ark_ref
+        string vtxo_spend
+        string proof
+        string status
+        string created_at
+    }
+    
+    JOBS {
+        string id PK
+        string payment_id FK
+        string endpoint
+        string args_json
+        string status
+        string result_json
+        string error_message
+        string created_at
+        string completed_at
+    }
+    
+    IDEMPOTENCY_KEYS {
+        string key PK
+        string response_json
+        string created_at
+        string expires_at
+    }
+    
+    QUOTES ||--|| PAYMENTS : "quote_id"
+    PAYMENTS ||--|| JOBS : "payment_id"
+```
+
+### File Structure
 
 ```
 src/
