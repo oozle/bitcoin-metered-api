@@ -49,7 +49,7 @@ export class ASPClient {
         latencyMs: Date.now() - start,
         lastRound: `r_${new Date().toISOString()}`,
       };
-    } catch (error) {
+    } catch {
       return {
         url: this.config.ark.aspUrl,
         healthy: false,
