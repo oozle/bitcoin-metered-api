@@ -12,7 +12,15 @@
     "test:unit": "NODE_OPTIONS='--experimental-vm-modules' jest --testPathPattern=unit",
     "test:integration": "NODE_OPTIONS='--experimental-vm-modules' jest --testPathPattern=integration",
     "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test",
+    "release:patch": "npm version patch && npm publish",
+    "release:minor": "npm version minor && npm publish",
+    "release:major": "npm version major && npm publish",
+    "docker:build": "docker build -t bitcoin-metered-api .",
+    "docker:run": "docker run -p 3000:3000 bitcoin-metered-api",
+    "docker:compose": "docker-compose up -d",
+    "docker:compose:dev": "docker-compose --profile dev up -d"
   },
   "keywords": [
     "bitcoin",
@@ -24,8 +32,26 @@
     "ai-agent",
     "payments"
   ],
-  "author": "",
+  "author": "Ozgun Gulerman <ozgun@example.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oozle/bitcoin-metered-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/oozle/bitcoin-metered-api/issues"
+  },
+  "homepage": "https://github.com/oozle/bitcoin-metered-api#readme",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "docs/**/*"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "dependencies": {
     "@eslint/js": "^9.38.0",
     "@fastify/cors": "^9.0.1",

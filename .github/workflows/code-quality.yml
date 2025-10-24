@@ -1,0 +1,229 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run weekly code quality checks
+    - cron: '0 10 * * 1'
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  code-coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm test -- --coverage --coverageReporters=lcov --coverageReporters=text
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+      - name: Coverage Summary
+        run: |
+          echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          npm test -- --coverage --coverageReporters=text-summary 2>&1 | grep -A 10 "Coverage summary" >> $GITHUB_STEP_SUMMARY || true
+
+  performance-audit:
+    name: Performance Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Analyze bundle size
+        run: |
+          echo "## Bundle Size Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Output" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          du -h dist/ | tail -1 >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Detailed Breakdown" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          find dist/ -type f -name "*.js" -exec du -h {} + | sort -hr | head -10 >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for large files
+        run: |
+          echo "## Large Files Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          LARGE_FILES=$(find . -type f -size +1M -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./dist/*" || true)
+          if [ -n "$LARGE_FILES" ]; then
+            echo "⚠️ Large files detected:" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "$LARGE_FILES" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No large files detected" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  dependency-analysis:
+    name: Dependency Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Analyze dependencies
+        run: |
+          echo "## Dependency Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Count dependencies
+          PROD_DEPS=$(jq '.dependencies | length' package.json)
+          DEV_DEPS=$(jq '.devDependencies | length' package.json)
+          
+          echo "### Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Production dependencies: $PROD_DEPS" >> $GITHUB_STEP_SUMMARY
+          echo "- Development dependencies: $DEV_DEPS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check for unused dependencies
+          echo "### Unused Dependencies Check" >> $GITHUB_STEP_SUMMARY
+          if command -v npx depcheck &> /dev/null; then
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            npx depcheck --json | jq -r '.dependencies[]' || echo "All dependencies are used" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Depcheck not available" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  code-complexity:
+    name: Code Complexity
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install complexity analysis tools
+        run: npm install -g complexity-report
+
+      - name: Analyze code complexity
+        run: |
+          echo "## Code Complexity Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if command -v cr &> /dev/null; then
+            echo "### Complexity Metrics" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            find src -name "*.ts" -exec cr {} + | head -20 >> $GITHUB_STEP_SUMMARY || true
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Complexity report tool not available" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Count lines of code
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Lines of Code" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "TypeScript files:" >> $GITHUB_STEP_SUMMARY
+          find src -name "*.ts" | xargs wc -l | tail -1 >> $GITHUB_STEP_SUMMARY
+          echo "Test files:" >> $GITHUB_STEP_SUMMARY
+          find . -name "*.test.ts" -o -name "*.spec.ts" | xargs wc -l | tail -1 >> $GITHUB_STEP_SUMMARY || echo "0 test" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  tech-debt:
+    name: Technical Debt
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for TODOs and FIXMEs
+        run: |
+          echo "## Technical Debt Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          TODO_COUNT=$(grep -r "TODO" src/ || true | wc -l)
+          FIXME_COUNT=$(grep -r "FIXME" src/ || true | wc -l)
+          
+          echo "### Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- TODOs: $TODO_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "- FIXMEs: $FIXME_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$TODO_COUNT" -gt 0 ] || [ "$FIXME_COUNT" -gt 0 ]; then
+            echo "### Items Found" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            grep -rn "TODO\|FIXME" src/ | head -20 >> $GITHUB_STEP_SUMMARY || true
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check code duplication
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Code Duplication Check" >> $GITHUB_STEP_SUMMARY
+          # Simple duplication check - look for repeated function signatures
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          grep -r "^export.*function\|^async.*function\|^function" src/ | sort | uniq -d | head -10 >> $GITHUB_STEP_SUMMARY || echo "No obvious duplication detected" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

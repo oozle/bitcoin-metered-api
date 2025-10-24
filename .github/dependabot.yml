@@ -1,0 +1,95 @@
+version: 2
+updates:
+  # NPM dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "oozle"
+    assignees:
+      - "oozle"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "automated"
+    groups:
+      # Group development dependencies together
+      dev-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "@types/*"
+          - "*eslint*"
+          - "typescript"
+          - "jest"
+          - "tsx"
+        exclude-patterns:
+          - "@types/node" # Keep Node.js types separate for LTS alignment
+      # Group production dependencies by category
+      build-tools:
+        patterns:
+          - "fastify*"
+          - "pino*"
+          - "commander"
+      crypto-bitcoin:
+        patterns:
+          - "*bitcoin*"
+          - "*ark*"
+          - "nanoid"
+      database-storage:
+        patterns:
+          - "*sqlite*"
+          - "bullmq"
+          - "ioredis"
+    ignore:
+      # Ignore major version updates for critical dependencies
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "fastify"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # Specific version constraints
+      - dependency-name: "*"
+        versions: ["< 1.0"]
+
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+      timezone: "UTC"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    labels:
+      - "docker"
+      - "dependencies"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/.github/workflows"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+      timezone: "UTC"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "github-actions"
+      - "dependencies"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
