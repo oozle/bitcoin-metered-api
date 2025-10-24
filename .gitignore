@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+.env
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+.vscode/
+.idea/
