@@ -53,7 +53,7 @@
     "registry": "https://registry.npmjs.org"
   },
   "dependencies": {
-    "@eslint/js": "^9.38.0",
+    "@eslint/js": "^9.39.1",
     "@fastify/cors": "^9.0.1",
     "better-sqlite3": "^11.7.0",
     "bullmq": "^5.28.2",
